@@ -2,10 +2,9 @@
 #define STDOUT_FD 1
 
 // syscall
-static long inline syscall(long register cmd, long register arg1,
-                           long register arg2, long register arg3,
-                           long register arg4, long register arg5,
-                           long register arg6) {
+static long syscall(long register cmd, long register arg1, long register arg2,
+                    long register arg3, long register arg4, long register arg5,
+                    long register arg6) {
   long register ret;
   __asm__ volatile("mov rax, %1;"
                    "mov rdi, %2;"
@@ -19,7 +18,8 @@ static long inline syscall(long register cmd, long register arg1,
                    : "=r"(ret)
                    : "r"(cmd), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4),
                      "r"(arg5), "r"(arg6)
-                   : "rax", "rdi", "rsi", "rdx", "r10", "r8", "r9");
+                   : "rax", "rdi", "rsi", "rdx", "r10", "r8", "r9", "rcx",
+                     "r11");
   return ret;
 }
 
@@ -87,12 +87,7 @@ static int inline open(char *pathname, int flags, int mode) {
 static int inline chdir(char *path) {
   return syscall(80, (long)path, 0, 0, 0, 0, 0);
 }
-static int inline getcwd(char *buf, long size) {
-  return syscall(79, (long)buf, size, 0, 0, 0, 0);
-}
 
-static int inline getuid() { return syscall(102, 0, 0, 0, 0, 0, 0); }
-static int inline getgid() { return syscall(102, 0, 0, 0, 0, 0, 0); }
 static int inline exit(int status) {
   return syscall(60, status, 0, 0, 0, 0, 0);
 }
@@ -107,6 +102,7 @@ struct linux_dirent {
 static int inline getdents(int fd, void *dirp, int count) {
   return syscall(78, fd, (long)dirp, count, 0, 0, 0);
 }
+static int inline getuid() { return syscall(102, 0, 0, 0, 0, 0, 0); }
 
 // lib
 
@@ -261,26 +257,9 @@ void cd(char *buf) {
   }
 }
 
-void id() {
-  char buf[30 + 1];
-  write(1, "uid=", 4);
-  ltostr(getuid(), buf, 30);
-  write(1, buf, strlen(buf));
-  write(1, " ", 1);
-  write(1, "gid=", 4);
-  ltostr(getgid(), buf, 30);
-  puts(buf);
-}
-
 void ps1() {
   char buf[0x100 + 1] = {0};
   int ret;
-  ret = getcwd(buf, 0x100);
-  if (ret < 0)
-    write(1, "???", 3);
-  else
-    write(1, buf, ret);
-  write(1, " ", 1);
   write(1, getuid() == 0 ? "#" : "$", 1);
   write(1, " ", 1);
 }
@@ -308,8 +287,6 @@ void _start() {
       ls(buf);
     } else if (!memcmp(buf, "ls\0", 3)) {
       ls(buf);
-    } else if (!memcmp(buf, "id\0", 3)) {
-      id();
     } else if (!memcmp(buf, "cd ", 3)) {
       cd(buf);
     } else if (!memcmp(buf, "exit", 4)) {
