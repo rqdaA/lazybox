@@ -79,6 +79,7 @@ static int inline munmap(void *addr, long length) {
 #define O_RDWR 2
 #define O_CREAT 0100
 #define O_DIRECTORY 0200000
+#define O_NONBLOCK 00004000
 
 static int inline open(char *pathname, int flags, int mode) {
   return syscall(2, (long)pathname, flags, mode, 0, 0, 0);
@@ -133,31 +134,6 @@ int memcmp(char *s1, char *s2, long n) {
   return 0;
 }
 
-void ltostr(long n, char *buf, long size) {
-  int is_negative = n < 0;
-  long num = !is_negative ? n : -n;
-  long i = 0;
-  if (num == 0) {
-    buf[0] = '0';
-    buf[1] = '\0';
-    return;
-  }
-
-  while (num > 0 && i < size - 1) {
-    buf[i++] = (num % 10) + '0';
-    num /= 10;
-  }
-  if (is_negative) {
-    buf[i++] = '-';
-  }
-  int len = i;
-  for (int j = 0; j < len / 2; j++) {
-    char temp = buf[j];
-    buf[j] = buf[len - 1 - j];
-    buf[len - 1 - j] = temp;
-  }
-}
-
 void puts(char *s) {
   if (!*s)
     return;
@@ -171,44 +147,32 @@ void cat(char *buf) {
   long sz;
   char *filename = strchr(buf, ' ');
   char *filebuf;
-  struct stat *statbuf;
   if (!filename) {
     puts("cat: No filename passed");
     return;
   }
   filename++;
   fd = open(filename, O_RDONLY, 0);
-  if (!fd) {
+  if (fd < 0) {
     puts("cat: No such file");
     return;
   }
-  statbuf = mmap(0, sizeof(struct stat), PROT_READ | PROT_WRITE,
-                 MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-  if ((long)statbuf < 0) {
-    puts("cat: Failed to allocate a buffer for stat");
-    goto cleanup_fd;
-  }
-  ret = fstat(fd, statbuf);
-  if (ret < 0) {
-    puts("cat: Failed to fstat");
-    goto cleanup_stat;
-  }
-  sz = statbuf->st_size;
-  if (sz < 0) {
-    puts("cat: Invalid file");
-    goto cleanup_stat;
-  }
-  filebuf = mmap(0, sz, PROT_READ, MAP_PRIVATE, fd, 0);
+
+  filebuf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                 -1, 0);
   if ((long)filebuf == -1) {
     puts("cat: Failed to mmap");
-    goto cleanup_stat;
+    goto cleanup_fd;
   }
-  write(STDOUT_FD, filebuf, sz);
-  puts("");
+  for (;;) {
+    ret = read(fd, filebuf, 0x1000);
+    if (!ret)
+      break;
+    write(STDOUT_FD, filebuf, ret);
+  }
 
+  puts("");
   munmap(filebuf, sz);
-cleanup_stat:
-  munmap(statbuf, sizeof(struct stat));
 cleanup_fd:
   close(fd);
 }
