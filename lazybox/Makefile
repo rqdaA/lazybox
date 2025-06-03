@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -fno-builtin -masm=intel -nostdlib -nostartfiles -O3 -fno-stack-protector
 LDFLAGS = -T custom.ld -static -s
-TARGET = tinyelf
+TARGET = lazybox
 SOURCE = main.c
 
 all: $(TARGET)
